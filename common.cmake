@@ -21,91 +21,89 @@
 # TARGETS: 存储已经配置的目标, 输出信息时使用
 macro(PrepareProject)
 	if(${CMAKE_CURRENT_SOURCE_DIR} STREQUAL ${CMAKE_SOURCE_DIR})
-		set(TARGETS "")
-	endif()
+		set(supportedPlatforms "Windows;Linux")
+		set(TARGET_DEV_SYSTEM "${CMAKE_CXX_PLATFORM_ID}")
 
-	set(supportedPlatforms "Windows;Linux")
-	set(TARGET_DEV_SYSTEM "${CMAKE_CXX_PLATFORM_ID}")
+		list(FIND supportedPlatforms ${TARGET_DEV_SYSTEM} tempResult)
 
-	list(FIND supportedPlatforms ${TARGET_DEV_SYSTEM} tempResult)
-
-	if(${tempResult} EQUAL -1)
-		message(FATAL_ERROR "Unsupported platform: ${CMAKE_CXX_PLATFORM_ID} to configure!")
-	endif()
-
-	# ###########################################################################################
-	# 设置目标架构
-	# ###########################################################################################
-	string(TOLOWER "${CMAKE_C_COMPILER_ARCHITECTURE_ID}" tempResult)
-
-	if("${tempResult}" STREQUAL x86)
-		set(TARGET_ARCH x86)
-	elseif("${tempResult}" STREQUAL x64)
-		set(TARGET_ARCH x64)
-	elseif("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL x86_64)
-		set(TARGET_ARCH x64)
-	elseif("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL aarch64)
-		set(TARGET_ARCH aarch64)
-	endif()
-
-	# ###########################################################################################
-	# 设置构建配置名
-	# ###########################################################################################
-	if(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
-		set(BUILD_CONFIGUARATION "Debug")
-	else()
-		set(BUILD_CONFIGUARATION "Release")
-	endif()
-
-	# ###########################################################################################
-	# 输出目录
-	# ###########################################################################################
-	string(SUBSTRING ${BUILD_CONFIGUARATION} 0 1 OUTPUT_DIR)
-
-	if(MSVC)
-		set(OUTPUT_DIR ${TARGET_ARCH}_v${MSVC_TOOLSET_VERSION}${OUTPUT_DIR})
-	else()
-		set(OUTPUT_DIR ${TARGET_ARCH}_${CMAKE_CXX_COMPILER_ID}${OUTPUT_DIR})
-	endif()
-
-	# ###########################################################################################
-	# 设置系统头文件目录（仅用于clangd）
-	# ###########################################################################################
-	if(MSVC)
-		string(REGEX REPLACE "^(.*)/(b|B)in.*$" "\\1" sysIncludeDir ${CMAKE_CXX_COMPILER})
-
-		if(MSVC_VERSION EQUAL 1200)
-			include_directories(SYSTEM
-				"C:/Program Files (x86)/Microsoft SDK/include"
-				${sysIncludeDir}/mfc/include
-				${sysIncludeDir}/atl/include
-			)
-
-			include_directories(SYSTEM ${sysIncludeDir}/include)
-		else()
-			include_directories(SYSTEM ${sysIncludeDir}/atlmfc/include)
-
-			if(MSVC_VERSION EQUAL 1600)
-				include_directories(SYSTEM "C:/Program Files (x86)/Microsoft SDKs/Windows/v7.0A/Include")
-			else()
-				string(REGEX MATCH "^(.+)/bin/([^/]*)/" tempResult ${CMAKE_MT})
-				include_directories(SYSTEM
-					${CMAKE_MATCH_1}/include/${CMAKE_MATCH_2}/ucrt
-					${CMAKE_MATCH_1}/include/${CMAKE_MATCH_2}/um
-					${CMAKE_MATCH_1}/include/${CMAKE_MATCH_2}/shared
-					${CMAKE_MATCH_1}/include/${CMAKE_MATCH_2}/winrt
-					${CMAKE_MATCH_1}/include/${CMAKE_MATCH_2}/cppwinrt
-				)
-			endif()
+		if(${tempResult} EQUAL -1)
+			message(FATAL_ERROR "Unsupported platform: ${CMAKE_CXX_PLATFORM_ID} to configure!")
 		endif()
 
-	else()
-		foreach(file ${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES})
-			add_compile_options(-isystem${file})
-		endforeach()
-	endif()
+		# ###########################################################################################
+		# 设置目标架构
+		# ###########################################################################################
+		string(TOLOWER "${CMAKE_C_COMPILER_ARCHITECTURE_ID}" tempResult)
 
-	set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+		if("${tempResult}" STREQUAL x86)
+			set(TARGET_ARCH x86)
+		elseif("${tempResult}" STREQUAL x64)
+			set(TARGET_ARCH x64)
+		elseif("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL x86_64)
+			set(TARGET_ARCH x64)
+		elseif("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL aarch64)
+			set(TARGET_ARCH aarch64)
+		endif()
+
+		# ###########################################################################################
+		# 设置构建配置名
+		# ###########################################################################################
+		if(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
+			set(BUILD_CONFIGUARATION "Debug")
+		else()
+			set(BUILD_CONFIGUARATION "Release")
+		endif()
+
+		# ###########################################################################################
+		# 输出目录
+		# ###########################################################################################
+		string(SUBSTRING ${BUILD_CONFIGUARATION} 0 1 OUTPUT_DIR)
+
+		if(MSVC)
+			set(OUTPUT_DIR ${TARGET_ARCH}_v${MSVC_TOOLSET_VERSION}${OUTPUT_DIR})
+		else()
+			set(OUTPUT_DIR ${TARGET_ARCH}_${CMAKE_CXX_COMPILER_ID}${OUTPUT_DIR})
+		endif()
+
+		# ###########################################################################################
+		# 设置系统头文件目录（仅用于clangd）
+		# ###########################################################################################
+		if(MSVC)
+			string(REGEX REPLACE "^(.*)/(b|B)in.*$" "\\1" sysIncludeDir ${CMAKE_CXX_COMPILER})
+
+			if(MSVC_VERSION EQUAL 1200)
+				include_directories(SYSTEM
+					"C:/Program Files (x86)/Microsoft SDK/include"
+					${sysIncludeDir}/mfc/include
+					${sysIncludeDir}/atl/include
+				)
+
+				include_directories(SYSTEM ${sysIncludeDir}/include)
+			else()
+				include_directories(SYSTEM ${sysIncludeDir}/atlmfc/include)
+
+				if(MSVC_VERSION EQUAL 1600)
+					include_directories(SYSTEM "C:/Program Files (x86)/Microsoft SDKs/Windows/v7.0A/Include")
+				else()
+					string(REGEX MATCH "^(.+)/bin/([^/]*)/" tempResult ${CMAKE_MT})
+					include_directories(SYSTEM
+						${CMAKE_MATCH_1}/include/${CMAKE_MATCH_2}/ucrt
+						${CMAKE_MATCH_1}/include/${CMAKE_MATCH_2}/um
+						${CMAKE_MATCH_1}/include/${CMAKE_MATCH_2}/shared
+						${CMAKE_MATCH_1}/include/${CMAKE_MATCH_2}/winrt
+						${CMAKE_MATCH_1}/include/${CMAKE_MATCH_2}/cppwinrt
+					)
+				endif()
+			endif()
+
+		else()
+			foreach(file ${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES})
+				add_compile_options(-isystem${file})
+			endforeach()
+		endif()
+
+		set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+	endif()
 endmacro()
 
 # 内部使用添加指定路径下的所有文件至给定容器中, 用于递归调用
