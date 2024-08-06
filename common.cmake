@@ -26,8 +26,9 @@ macro(PrepareProject)
 
 	set(supportedPlatforms "Windows;Linux")
 	set(TARGET_DEV_SYSTEM "${CMAKE_CXX_PLATFORM_ID}")
-	
+
 	list(FIND supportedPlatforms ${TARGET_DEV_SYSTEM} tempResult)
+
 	if(${tempResult} EQUAL -1)
 		message(FATAL_ERROR "Unsupported platform: ${CMAKE_CXX_PLATFORM_ID} to configure!")
 	endif()
@@ -172,23 +173,30 @@ endfunction()
 #
 # [ARGV0] target_name 目标名称
 # [ARGV1] target_type 目标类型，可执行文件 `EXECUTABLE`, 动态库 `SHARED`, 静态库 `STATIC`
-# [ARGV2][OPT] extra_sources 额外的源文件
-# [ARGV3][OPT] exclude_sources_regex 需要排除的文件的模式
+# [ARGV2][OPT] source_dir 源文件根目录
+# [ARGV3][OPT] extra_sources 额外的源文件
+# [ARGV4][OPT] exclude_sources_regex 需要排除的文件的模式
 macro(AddTarget target_name target_type)
 	# ###########################################################################################
 	# 规整参数
 	# ###########################################################################################
 	if(TRUE)
 		if("${ARGV2}" STREQUAL "")
-			set(extra_sources "")
+			set(source_dir "${CMAKE_CURRENT_SOURCE_DIR}")
 		else()
-			set(extra_sources ${${ARGV2}})
+			set(source_dir ${ARGV2})
 		endif()
 
 		if("${ARGV3}" STREQUAL "")
+			set(extra_sources "")
+		else()
+			set(extra_sources ${${ARGV3}})
+		endif()
+
+		if("${ARGV4}" STREQUAL "")
 			set(exclude_sources_regex "")
 		else()
-			set(exclude_sources_regex ${${ARGV3}})
+			set(exclude_sources_regex ${${ARGV4}})
 		endif()
 	endif()
 
@@ -198,9 +206,16 @@ macro(AddTarget target_name target_type)
 	if(TRUE)
 		set(targetSources ${extra_sources})
 
-		AddFiles(${CMAKE_CURRENT_SOURCE_DIR} "Header Files" "\\.(h|hpp|inl)$" targetSources TRUE ${exclude_sources_regex})
-		AddFiles(${CMAKE_CURRENT_SOURCE_DIR} "Source Files" "\\.(cpp|cc|cxx|def)$" targetSources TRUE ${exclude_sources_regex})
-		AddFiles(${CMAKE_CURRENT_SOURCE_DIR} "Resource Files" "\\.rc$" targetSources TRUE ${exclude_sources_regex})
+		if(EXISTS ${source_dir}/include)
+			AddFiles(${source_dir}/include "Header Files" "\\.(h|hpp|inl)$" targetSources TRUE ${exclude_sources_regex})
+		elseif(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/include)
+			AddFiles(${CMAKE_CURRENT_SOURCE_DIR}/include "Header Files" "\\.(h|hpp|inl)$" targetSources TRUE ${exclude_sources_regex})
+		else()
+			AddFiles(${CMAKE_CURRENT_SOURCE_DIR} "Header Files" "\\.(h|hpp|inl)$" targetSources TRUE ${exclude_sources_regex})
+		endif()
+
+		AddFiles(${source_dir} "Source Files" "\\.(cpp|cc|cxx|def)$" targetSources TRUE ${exclude_sources_regex})
+		AddFiles(${source_dir} "Resource Files" "\\.rc$" targetSources TRUE ${exclude_sources_regex})
 	endif()
 
 	# ###########################################################################################
@@ -217,21 +232,40 @@ macro(AddTarget target_name target_type)
 	# ###########################################################################################
 	# 设置预编译头，注意，此项会导致该CMake构建时能通过，但使用TdxCMake构建时不通过，固须在某些文件添加StdAfx.h的引用
 	# ###########################################################################################
-	if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/StdAfx.h)
-		target_precompile_headers(${target_name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/StdAfx.h)
-	elseif(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/stdafx.h)
-		target_precompile_headers(${target_name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/stdafx.h)
-	elseif(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/pch.h)
-		target_precompile_headers(${target_name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/pch.h)
+	if(TRUE)
+		list(APPEND precompileHeaders
+			${source_dir}/StdAfx.h
+			${source_dir}/stdafx.h
+			${source_dir}/pch.h
+			${source_dir}/include/pch.h
+			${source_dir}/include/${target_name}/pch.h
+			${CMAKE_CURRENT_SOURCE_DIR}/pch.h
+			${CMAKE_CURRENT_SOURCE_DIR}/include/pch.h
+			${CMAKE_CURRENT_SOURCE_DIR}/include/${target_name}/pch.h
+		)
+
+		foreach(header ${precompileHeaders})
+			if(EXISTS ${header})
+				target_precompile_headers(${target_name} PUBLIC ${header})
+				break()
+			endif()
+		endforeach()
+		unset(precompileHeaders)
 	endif()
 
 	# ###########################################################################################
 	# 设置包含目录
 	# ###########################################################################################
-	target_include_directories(${target_name}
-		PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/${target_name}
-		INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include
-	)
+	if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/include/${target_name})
+		target_include_directories(${target_name}
+			PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/${target_name}
+			INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include
+		)
+	elseif(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/include)
+		target_include_directories(${target_name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+	else()
+		target_include_directories(${target_name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+	endif()
 
 	# ###########################################################################################
 	# 链接选项
