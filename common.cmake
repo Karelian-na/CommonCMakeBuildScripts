@@ -248,6 +248,7 @@ macro(AddTarget target_name target_type)
 				break()
 			endif()
 		endforeach()
+
 		unset(precompileHeaders)
 	endif()
 
@@ -341,42 +342,52 @@ macro(OutputTargetsInfos)
 			get_target_property(tempResult ${target} SOURCES)
 			list(FILTER tempResult INCLUDE REGEX ".*\.h$")
 
-			foreach(file ${tempResult})
-				message(STATUS "|       ${file}")
-			endforeach()
+			if(NOT "${tempResult}" STREQUAL "tempResult-NOTFOUND")
+				foreach(file ${tempResult})
+					message(STATUS "|       ${file}")
+				endforeach()
+			endif()
 
 			# 打印源文件
 			message(STATUS "|   with sources:")
 			get_target_property(tempResult ${target} SOURCES)
 			list(FILTER tempResult EXCLUDE REGEX ".*\.h$")
 
-			foreach(file ${tempResult})
-				message(STATUS "|       ${file}")
-			endforeach()
+			if(NOT "${tempResult}" STREQUAL "tempResult-NOTFOUND")
+				foreach(file ${tempResult})
+					message(STATUS "|       ${file}")
+				endforeach()
+			endif()
 
 			# 打印包含目录
 			get_target_property(tempResult ${target} INCLUDE_DIRECTORIES)
 			message(STATUS "|   with include dirs:")
 
-			foreach(dir ${tempResult})
-				message(STATUS "|       ${dir}")
-			endforeach()
+			if(NOT "${tempResult}" STREQUAL "tempResult-NOTFOUND")
+				foreach(dir ${tempResult})
+					message(STATUS "|       ${dir}")
+				endforeach()
+			endif()
 
 			# 打印链接目录
 			get_target_property(tempResult ${target} LINK_DIRECTORIES)
 			message(STATUS "|   with link dirs:")
 
-			foreach(dir ${tempResult})
-				message(STATUS "|       ${dir}")
-			endforeach()
+			if(NOT "${tempResult}" STREQUAL "tempResult-NOTFOUND")
+				foreach(dir ${tempResult})
+					message(STATUS "|       ${dir}")
+				endforeach()
+			endif()
 
 			# 打印预处理器定义
 			get_target_property(tempResult ${target} COMPILE_DEFINITIONS)
 			message(STATUS "|   with definitions:")
 
-			foreach(item ${tempResult})
-				message(STATUS "|       ${item}")
-			endforeach()
+			if(NOT "${tempResult}" STREQUAL "tempResult-NOTFOUND")
+				foreach(item ${tempResult})
+					message(STATUS "|       ${item}")
+				endforeach()
+			endif()
 
 			# 打印编译选项
 			get_target_property(tempResult ${target} COMPILE_OPTIONS)
