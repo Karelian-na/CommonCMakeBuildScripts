@@ -131,7 +131,7 @@ function(InnerAddAllFiles dir_path prefix files_container_name extensions recurs
 			InnerAddAllFiles(${entry} "${prefix}/${tempResult}" ${files_container_name} "${extensions}" ${recurse} ${exclude_sources_regex})
 		endif()
 
-		get_filename_component(tempResult ${entry} EXT)
+		get_filename_component(tempResult ${entry} LAST_EXT)
 
 		if("${tempResult}" STREQUAL "")
 			continue()
