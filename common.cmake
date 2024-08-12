@@ -24,9 +24,7 @@ macro(PrepareProject)
 		set(supportedPlatforms "Windows;Linux")
 		set(TARGET_DEV_SYSTEM "${CMAKE_CXX_PLATFORM_ID}")
 
-		list(FIND supportedPlatforms ${TARGET_DEV_SYSTEM} tempResult)
-
-		if(${tempResult} EQUAL -1)
+		if(NOT ${TARGET_DEV_SYSTEM} IN_LIST supportedPlatforms)
 			message(FATAL_ERROR "Unsupported platform: ${CMAKE_CXX_PLATFORM_ID} to configure!")
 		endif()
 
@@ -70,20 +68,19 @@ macro(PrepareProject)
 		# ###########################################################################################
 		if(MSVC)
 			string(REGEX REPLACE "^(.*)/(b|B)in.*$" "\\1" sysIncludeDir ${CMAKE_CXX_COMPILER})
+			set(programFilesx86Path "$ENV{ProgramFiles} (x86)")
 
 			if(MSVC_VERSION EQUAL 1200)
 				include_directories(SYSTEM
-					"C:/Program Files (x86)/Microsoft SDK/include"
+					"${programFilesx86Path}/Microsoft SDK/include"
 					${sysIncludeDir}/mfc/include
 					${sysIncludeDir}/atl/include
 				)
-
-				include_directories(SYSTEM ${sysIncludeDir}/include)
 			else()
 				include_directories(SYSTEM ${sysIncludeDir}/atlmfc/include)
 
 				if(MSVC_VERSION EQUAL 1600)
-					include_directories(SYSTEM "C:/Program Files (x86)/Microsoft SDKs/Windows/v7.0A/Include")
+					include_directories(SYSTEM "${programFilesx86Path}/Microsoft SDKs/Windows/v7.0A/Include")
 				else()
 					string(REGEX MATCH "^(.+)/bin/([^/]*)/" tempResult ${CMAKE_MT})
 					include_directories(SYSTEM
@@ -96,6 +93,7 @@ macro(PrepareProject)
 				endif()
 			endif()
 
+			include_directories(SYSTEM ${sysIncludeDir}/include)
 		else()
 			foreach(file ${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES})
 				add_compile_options(-isystem${file})
@@ -107,19 +105,42 @@ macro(PrepareProject)
 endmacro()
 
 # 内部使用添加指定路径下的所有文件至给定容器中, 用于递归调用
-function(InnerAddAllFiles dir_path prefix extensions files_container_name recurse exclude_sources_regex)
+#
+# [ARGV0] `dir_path`: 将要添加的文件的路径
+# [ARGV1] `prefix`: vs过滤器前缀
+# [ARGV2] `files_container_name`: 指定添加的容器的名称
+# [ARGV3] `extensions`: 源文件的扩展名
+# [ARGV4] `recurse`: 是否递归
+# [ARGV5] `exclude_sources_regex`: 排除的源文件
+function(InnerAddAllFiles dir_path prefix files_container_name extensions recurse exclude_sources_regex)
+	if("${exclude_sources_regex}" STREQUAL "")
+		message(FATAL_ERROR "exclude_sources_regex is empty, considering do not call InnerAddAllFiles diectly!")
+	endif()
+
 	set(GROUPED_FILES "")
-	file(GLOB entries "${dir_path}/**")
+	file(GLOB entries LIST_DIRECTORIES true ${dir_path}/*)
 
 	foreach(entry ${entries})
-		get_filename_component(entryName ${entry} NAME)
+		if(${entry} MATCHES ${exclude_sources_regex})
+			continue()
+		endif()
+
+		get_filename_component(tempResult ${entry} NAME)
 
 		if(IS_DIRECTORY ${entry} AND "${recurse}" STREQUAL "TRUE")
-			InnerAddAllFiles(${entry} "${prefix}/${entryName}" ${extensions} ${files_container_name} ${recurse} ${exclude_sources_regex})
-		elseif(${entryName} MATCHES ${extensions})
-			if(NOT "${exclude_sources_regex}" STREQUAL "" AND NOT ${entryName} MATCHES ${exclude_sources_regex})
-				list(APPEND GROUPED_FILES ${entry})
-			endif()
+			InnerAddAllFiles(${entry} "${prefix}/${tempResult}" ${files_container_name} "${extensions}" ${recurse} ${exclude_sources_regex})
+		endif()
+
+		get_filename_component(tempResult ${entry} EXT)
+
+		if("${tempResult}" STREQUAL "")
+			continue()
+		endif()
+
+		string(SUBSTRING ${tempResult} 1 -1 tempResult)
+
+		if(${tempResult} IN_LIST extensions)
+			list(APPEND GROUPED_FILES ${entry})
 		endif()
 	endforeach()
 
@@ -135,21 +156,25 @@ endfunction()
 #
 # [ARGV0] `dir_path`: 将要添加的文件的路径
 # [ARGV1] `prefix`: vs过滤器前缀
-# [ARGV2] `extensions`: 将要添加的文件的匹配模式
-# [ARGV3] `files_container_name`: 指定添加的容器的名称
+# [ARGV2] `files_container_name`: 指定添加的容器的名称
+# [ARGV3] `extensions`: 源文件的扩展名
 # [ARGV4][OPT] `recurse`: 是否递归
 # [ARGV5][OPT] `exclude_sources_regex`: 排除的源文件
-function(AddFiles dir_path prefix extensions files_container_name)
+function(AddFiles dir_path prefix files_container_name extensions)
+	if("${ARGV3}" STREQUAL "")
+		message(FATAL_ERROR "extensions must not be empty")
+	endif()
+
 	if("${ARGV4}" STREQUAL "")
 		set(recurse TRUE)
 	else()
 		set(recurse ${ARGV4})
 	endif()
 
-	if("${ARGV5}" STREQUAL "")
-		set(exclude_sources_regex "^$")
-	else()
-		set(exclude_sources_regex ${ARGV5})
+	set(exclude_sources_regex "((\\.cache|\\.git|build)$)")
+
+	if(NOT "${ARGV5}" STREQUAL "")
+		set(exclude_sources_regex "${exclude_sources_regex}|${ARGV5}")
 	endif()
 
 	if(${dir_path} MATCHES "^\\.?$")
@@ -162,7 +187,7 @@ function(AddFiles dir_path prefix extensions files_container_name)
 			message(FATAL_ERROR "couldn't add a directory's files which path is not in ${CMAKE_CURRENT_SOURCE_DIR}")
 		endif()
 
-		InnerAddAllFiles(${dir_path} ${prefix} ${extensions} ${files_container_name} ${recurse} ${exclude_sources_regex})
+		InnerAddAllFiles(${dir_path} ${prefix} ${files_container_name} "${extensions}" ${recurse} ${exclude_sources_regex})
 		set(${files_container_name} ${${files_container_name}} PARENT_SCOPE)
 	endif()
 endfunction()
@@ -194,7 +219,7 @@ macro(AddTarget target_name target_type)
 		if("${ARGV4}" STREQUAL "")
 			set(exclude_sources_regex "")
 		else()
-			set(exclude_sources_regex ${${ARGV4}})
+			set(exclude_sources_regex ${ARGV4})
 		endif()
 	endif()
 
@@ -205,15 +230,15 @@ macro(AddTarget target_name target_type)
 		set(targetSources ${extra_sources})
 
 		if(EXISTS ${source_dir}/include)
-			AddFiles(${source_dir}/include "Header Files" "\\.(h|hpp|inl)$" targetSources TRUE ${exclude_sources_regex})
+			AddFiles(${source_dir}/include "Header Files" targetSources "h;hpp;inl" TRUE ${exclude_sources_regex})
 		elseif(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/include)
-			AddFiles(${CMAKE_CURRENT_SOURCE_DIR}/include "Header Files" "\\.(h|hpp|inl)$" targetSources TRUE ${exclude_sources_regex})
+			AddFiles(${CMAKE_CURRENT_SOURCE_DIR}/include "Header Files" targetSources "h;hpp;inl" TRUE ${exclude_sources_regex})
 		else()
-			AddFiles(${CMAKE_CURRENT_SOURCE_DIR} "Header Files" "\\.(h|hpp|inl)$" targetSources TRUE ${exclude_sources_regex})
+			AddFiles(${CMAKE_CURRENT_SOURCE_DIR} "Header Files" targetSources "h;hpp;inl" TRUE ${exclude_sources_regex})
 		endif()
 
-		AddFiles(${source_dir} "Source Files" "\\.(cpp|cc|cxx|def)$" targetSources TRUE ${exclude_sources_regex})
-		AddFiles(${source_dir} "Resource Files" "\\.rc$" targetSources TRUE ${exclude_sources_regex})
+		AddFiles(${source_dir} "Source Files" targetSources "cxx;cc;cpp;c++" TRUE ${exclude_sources_regex})
+		AddFiles(${source_dir} "Resource Files" targetSources "rc" TRUE ${exclude_sources_regex})
 	endif()
 
 	# ###########################################################################################
@@ -306,9 +331,7 @@ macro(AddTarget target_name target_type)
 	endif()
 
 	# 添加到配置目标中
-	list(FIND TARGETS ${target_name} hasTarget)
-
-	if(hasTarget EQUAL -1)
+	if(NOT ${target_name} IN_LIST TARGETS)
 		list(APPEND TARGETS ${target_name})
 	endif()
 
@@ -322,6 +345,21 @@ macro(AddTarget target_name target_type)
 	)
 endmacro()
 
+# 输出配置目标信息
+#
+# 包含：
+# 1.目标的类型
+# 2.目标的名称
+# 3.目标的头文件
+# 4.目标的源文件
+# 5.目标的包含目录
+# 6.目标的链接目录
+# 7.目标的预处理器定义
+# 8.目标的编译选项
+# 9.目标的链接选项
+# 10.目标的链接选项
+# 11.目标的链接文件
+# 12.目标的安装信息
 macro(OutputTargetsInfos)
 	if(${CMAKE_CURRENT_SOURCE_DIR} STREQUAL ${CMAKE_SOURCE_DIR})
 		foreach(target ${TARGETS})
