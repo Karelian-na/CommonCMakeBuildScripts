@@ -302,9 +302,10 @@ macro(AddTarget target_name target_type)
     else()
         set(includeDir ${source_dir})
     endif()
-    target_include_directories(${target_name} PUBLIC
+    target_include_directories(${target_name} PRIVATE ${includeDir}
+        INTERFACE
         $<BUILD_INTERFACE:${includeDir}>
-        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_PREFIX}/include>
     )
 
     # ###########################################################################################
@@ -354,6 +355,7 @@ macro(AddTarget target_name target_type)
     if(NOT ${CMAKE_CURRENT_SOURCE_DIR} STREQUAL ${CMAKE_SOURCE_DIR})
         set(TARGETS ${TARGETS} PARENT_SCOPE)
     endif()
+    set(extra_sources "")
 endmacro()
 
 # 输出配置目标信息
