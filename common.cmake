@@ -1,3 +1,5 @@
+include(${CMAKE_CURRENT_LIST_DIR}/utils.cmake)
+
 # #######################################################################
 # CMake 自定义构建脚本
 # 支持 Windows构建、Linux构建、Windows跨平台构建、Linux跨平台构建
@@ -165,16 +167,10 @@ function(AddFiles dir_path prefix files_container_name extensions)
         message(FATAL_ERROR "extensions must not be empty")
     endif()
 
-    if("${ARGV4}" STREQUAL "")
-        set(recurse TRUE)
-    else()
-        set(recurse ${ARGV4})
-    endif()
-
-    set(exclude_sources_regex "((\\.cache|\\.git|build)$)")
-
+    RegularOptionalParameter("${ARGV4}" recurse TRUE)
+    set(exclude_sources_regex "((\\.cache$|\\.git$|build$))")
     if(NOT "${ARGV5}" STREQUAL "")
-        set(exclude_sources_regex "${exclude_sources_regex}|${ARGV5}")
+        string(APPEND exclude_sources_regex "|${ARGV5}")
     endif()
 
     if(${dir_path} MATCHES "^\\.?$")
@@ -187,10 +183,46 @@ function(AddFiles dir_path prefix files_container_name extensions)
             message(FATAL_ERROR "couldn't add a directory's files which path is not in ${CMAKE_CURRENT_SOURCE_DIR}")
         endif()
 
-        InnerAddAllFiles(${dir_path} ${prefix} ${files_container_name} "${extensions}" ${recurse} ${exclude_sources_regex})
+        InnerAddAllFiles(${dir_path} ${prefix} ${files_container_name} "${extensions}" ${recurse} "${exclude_sources_regex}")
         set(${files_container_name} ${${files_container_name}} PARENT_SCOPE)
     endif()
 endfunction()
+
+# Add precompile header to target
+# [ARGV0] target_name target name
+# [ARGV1] source_dir source directory to search pch files
+# [ARGV2][OPT] find_cmake_current_dir whether to search current cmake source dir for pch files, default to TRUE
+# [ARGV3][OPT] pch_name specific pch file name, if not provided, default to "pch.h;StdAfx.h;stdafx.h"
+macro(AddTargetPrecompileHeader target_name source_dir)
+    RegularOptionalParameter("${ARGV2}" find_cmake_current_dir TRUE)
+    RegularOptionalParameter("${ARGV3}" pch_names "pch.h;StdAfx.h;stdafx.h")
+
+    set(search_base_dir "${source_dir};${source_dir}/include")
+    if(${find_cmake_current_dir} STREQUAL "TRUE")
+        list(APPEND search_base_dir "${CMAKE_CURRENT_SOURCE_DIR};${CMAKE_CURRENT_SOURCE_DIR}/include;${CMAKE_CURRENT_SOURCE_DIR}/include/${target_name}")
+    endif()
+
+    foreach(candidate_base_dir ${search_base_dir})
+        set(is_found FALSE)
+        foreach(candidate_pch_name ${pch_names})
+            if(EXISTS ${candidate_base_dir}/${candidate_pch_name})
+                target_precompile_headers(${target_name} PRIVATE ${candidate_base_dir}/${candidate_pch_name})
+                set(is_found TRUE)
+                break()
+            endif()
+        endforeach()
+
+        if(${is_found})
+            break()
+        endif()
+    endforeach()
+
+    unset(search_base_dir)
+    unset(is_found)
+
+    unset(find_cmake_current_dir)
+    unset(pch_names)
+endmacro()
 
 # 添加构建目标
 #
@@ -205,31 +237,14 @@ macro(AddTarget target_name target_type)
     # 规整参数
     # ###########################################################################################
     if(TRUE)
+        RegularOptionalParameter("${ARGV2}" source_dir "${CMAKE_CURRENT_SOURCE_DIR}")
         if("${ARGV2}" STREQUAL "$")
             set(source_dir "")
-        elseif("${ARGV2}" STREQUAL "")
-            set(source_dir "${CMAKE_CURRENT_SOURCE_DIR}")
-        else()
-            set(source_dir ${ARGV2})
         endif()
 
-        if("${ARGV3}" STREQUAL "")
-            set(extra_sources "")
-        else()
-            set(extra_sources ${${ARGV3}})
-        endif()
-
-        if("${ARGV4}" STREQUAL "")
-            set(exclude_sources_regex "")
-        else()
-            set(exclude_sources_regex ${ARGV4})
-        endif()
-
-        if(NOT "${ARGV5}" STREQUAL "")
-            set(no_pch ${ARGV5})
-        else()
-            set(no_pch FALSE)
-        endif()
+        RegularOptionalParameter("${${ARGV3}}" extra_sources "")
+        RegularOptionalParameter("${ARGV4}" exclude_sources_regex "")
+        RegularOptionalParameter("${ARGV5}" no_pch FALSE)
     endif()
 
     # ###########################################################################################
@@ -261,42 +276,19 @@ macro(AddTarget target_name target_type)
         string(REPLACE "-" "_" legalled_name ${target_name})
         target_compile_definitions(${target_name} PUBLIC "${legalled_name}_STATIC")
     endif()
+    include(GNUInstallDirs)
+    unset(targetSources)
 
     # ###########################################################################################
     # 设置预编译头，注意，此项会导致该CMake构建时能通过，但使用TdxCMake构建时不通过，固须在某些文件添加StdAfx.h的引用
     # ###########################################################################################
     if("${no_pch}" STREQUAL "FALSE")
-        list(APPEND precompileHeaders
-            ${source_dir}/StdAfx.h
-            ${source_dir}/stdafx.h
-            ${source_dir}/pch.h
-            ${source_dir}/include/pch.h
-            ${source_dir}/include/${target_name}/pch.h
-            ${CMAKE_CURRENT_SOURCE_DIR}/pch.h
-            ${CMAKE_CURRENT_SOURCE_DIR}/include/pch.h
-            ${CMAKE_CURRENT_SOURCE_DIR}/include/${target_name}/pch.h
-        )
-
-        foreach(header ${precompileHeaders})
-            if(EXISTS ${header})
-                get_filename_component(headerName ${header} NAME)
-                target_precompile_headers(${target_name}
-                    PRIVATE ${header}
-                    INTERFACE
-                    $<BUILD_INTERFACE:${header}>
-                    $<INSTALL_INTERFACE:${CMAKE_INSTALL_PREFIX}/include/${target_name}/${headerName}>
-                )
-                break()
-            endif()
-        endforeach()
-
-        unset(precompileHeaders)
+        AddTargetPrecompileHeader(${target_name} "${source_dir}")
     endif()
 
     # ###########################################################################################
     # 设置包含目录
     # ###########################################################################################
-    set(includeDir)
     if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/include)
         set(includeDir ${CMAKE_CURRENT_SOURCE_DIR}/include)
     else()
@@ -305,8 +297,9 @@ macro(AddTarget target_name target_type)
     target_include_directories(${target_name} PRIVATE ${includeDir}
         INTERFACE
         $<BUILD_INTERFACE:${includeDir}>
-        $<INSTALL_INTERFACE:${CMAKE_INSTALL_PREFIX}/include>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
     )
+    unset(includeDir)
 
     # ###########################################################################################
     # 链接选项
@@ -355,7 +348,11 @@ macro(AddTarget target_name target_type)
     if(NOT ${CMAKE_CURRENT_SOURCE_DIR} STREQUAL ${CMAKE_SOURCE_DIR})
         set(TARGETS ${TARGETS} PARENT_SCOPE)
     endif()
-    set(extra_sources "")
+
+    unset(source_dir)
+    unset(extra_sources)
+    unset(exclude_sources_regex)
+    unset(no_pch)
 endmacro()
 
 # 输出配置目标信息
