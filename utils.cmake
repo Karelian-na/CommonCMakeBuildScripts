@@ -7,9 +7,9 @@
 # Regular optional parameter, will produce a variable named <param_name> 
 # which equals to <optional_arg_value> if provided, otherwise equals to <default_value>
 #
-# [ARGV0] optional_arg_value optional argument value to check, like `${ARGV1}`....
-# [ARGV1] param_name parameter name to set
-# [ARGV2][OPT] default_value default value to set if optional argument is empty, default to ""
+# [ARGV0] `optional_arg_value` optional argument value to check, like `${ARGV1}`....
+# [ARGV1] `param_name` parameter name to set
+# [ARGV2][OPT] `default_value` default value to set if optional argument is empty, default to ""
 macro(RegularOptionalParameter optional_arg_value param_name)
     if("${ARGV2}" STREQUAL "")
         set(default_value "")
@@ -24,4 +24,14 @@ macro(RegularOptionalParameter optional_arg_value param_name)
     endif()
 
     unset(default_value)
+endmacro()
+
+# Set given default value to `var_name` if it is empty
+#
+# [ARGV0] `var_name`: the variable name
+# [ARGV1] `default_value`: the default value to be set
+macro(VarOrDefault var_name default_value)
+    if ("${${var_name}}" STREQUAL "")
+        set(${var_name} ${default_value})
+    endif()
 endmacro()

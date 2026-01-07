@@ -1,26 +1,43 @@
 include(${CMAKE_CURRENT_LIST_DIR}/utils.cmake)
 
 # #######################################################################
-# CMake 自定义构建脚本
-# 支持 Windows构建、Linux构建、Windows跨平台构建、Linux跨平台构建
-# 本脚本编写说明:
-# 宏 和 函数 定义: 采用 `CamelCase` 命名法
-# 参数: 采用 `snake_case` 命名法
-# 局部变量: 采用 `camelBack` 命名法
+# Common CMake build scripts
+# Support Windows build, Linux build, Windows cross-platform build, Linux cross-platform build
+# Script writing instructions:
+# Macros and functions: use `CamelCase` naming convention
+# Parameters: use `snake_case` naming convention
+# Local variables: use `camelBack` naming convention
 #
-# CMakeList.txt文件示例:
-# 编写人: Karelian_na
+# Example CMakeList.txt:
+# ```cmake
+#   cmake_minimum_required(VERSION 3.15)
+#   include(path/to/common.cmake)
+#
+#   project(YourProjectName LANGUAGES CXX)
+#
+#   PrepareProject()
+#
+#   # add a target, automatically add all source files under `src_directory` recursively
+#   AddTarget(YourTargetName EXECUTABLE src_directory)
+#
+#   # add a target, only add additional source files
+#   AddFiles(path/to/extra/source "Source Files" extra_sources "cpp;cxx" TRUE)
+#   AddTarget(YourTargetName1 STATIC $ extra_sources)
+#
+#   # ouput targets info
+#   OutputTargetsInfos()
+# ```
+# Author: Karelian_na
 # ######################################################################
 
-# 加载本机环境配置
+# Load native environment configuration and set common variables
 #
-# 其余设置的变量
-# HOME_DIR: 当前用户配置目录
-# TARGET_DEV_SYSTEM: 目标计算机
-# TARGET_ARCH: 目标架构，取值为 `x86` 或 `x64` 或 `arm64`
-# BUILD_CONFIGUARATION: 构建配置，取值为 `Debug` 或 `Release`
-# OUTPUT_DIR: 输出目录
-# TARGETS: 存储已经配置的目标, 输出信息时使用
+# Other variables set:
+# `TARGET_DEV_SYSTEM`: target machine
+# `TARGET_ARCH`: target architecture, values are `x86`, `x64`, or `arm64`
+# `BUILD_CONFIGUARATION`: build configuration, values are `Debug` or `Release`
+# `OUTPUT_DIR`: output directory
+# `TARGETS`: stores configured targets, used for output information
 macro(PrepareProject)
     if(${CMAKE_CURRENT_SOURCE_DIR} STREQUAL ${CMAKE_SOURCE_DIR})
         set(supportedPlatforms "Windows;Linux")
@@ -31,7 +48,7 @@ macro(PrepareProject)
         endif()
 
         # ###########################################################################################
-        # 设置目标架构
+        # Set target architecture
         # ###########################################################################################
         string(TOLOWER "${CMAKE_C_COMPILER_ARCHITECTURE_ID}" tempResult)
 
@@ -46,7 +63,7 @@ macro(PrepareProject)
         endif()
 
         # ###########################################################################################
-        # 设置构建配置名
+        # Set build configuration name
         # ###########################################################################################
         if(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
             set(BUILD_CONFIGUARATION "Debug")
@@ -55,7 +72,7 @@ macro(PrepareProject)
         endif()
 
         # ###########################################################################################
-        # 输出目录
+        # Set output directory
         # ###########################################################################################
         string(SUBSTRING ${BUILD_CONFIGUARATION} 0 1 OUTPUT_DIR)
 
@@ -66,7 +83,7 @@ macro(PrepareProject)
         endif()
 
         # ###########################################################################################
-        # 设置系统头文件目录（仅用于clangd）
+        # Set system include directories (for clangd only)
         # ###########################################################################################
         if(MSVC)
             string(REGEX REPLACE "^(.*)/(b|B)in.*$" "\\1" sysIncludeDir ${CMAKE_CXX_COMPILER})
@@ -106,17 +123,18 @@ macro(PrepareProject)
     endif()
 endmacro()
 
-# 内部使用添加指定路径下的所有文件至给定容器中, 用于递归调用
+# Recursively add all files from the specified path that match the given extensions and not match the given regex to the given container
+# This function is for internal use only, do not call it directly, use `AddFiles` instead
 #
-# [ARGV0] `dir_path`: 将要添加的文件的路径
-# [ARGV1] `prefix`: vs过滤器前缀
-# [ARGV2] `files_container_name`: 指定添加的容器的名称
-# [ARGV3] `extensions`: 源文件的扩展名
-# [ARGV4] `recurse`: 是否递归
-# [ARGV5] `exclude_sources_regex`: 排除的源文件
-function(InnerAddAllFiles dir_path prefix files_container_name extensions recurse exclude_sources_regex)
+# [ARGV0] `dir_path`: the path to add files from
+# [ARGV1] `prefix`: visual studio filter prefix
+# [ARGV2] `files_container_name`: the name of the container to add files to
+# [ARGV3] `extensions`: source file extensions
+# [ARGV4] `recurse`: whether to recurse
+# [ARGV5] `exclude_sources_regex`: regex to exclude source files
+function(__AddAllFiles dir_path prefix files_container_name extensions recurse exclude_sources_regex)
     if("${exclude_sources_regex}" STREQUAL "")
-        message(FATAL_ERROR "exclude_sources_regex is empty, considering do not call InnerAddAllFiles diectly!")
+        message(FATAL_ERROR "exclude_sources_regex is empty, considering do not call __AddAllFiles diectly!")
     endif()
 
     set(GROUPED_FILES "")
@@ -130,7 +148,7 @@ function(InnerAddAllFiles dir_path prefix files_container_name extensions recurs
         get_filename_component(tempResult ${entry} NAME)
 
         if(IS_DIRECTORY ${entry} AND "${recurse}" STREQUAL "TRUE")
-            InnerAddAllFiles(${entry} "${prefix}/${tempResult}" ${files_container_name} "${extensions}" ${recurse} ${exclude_sources_regex})
+            __AddAllFiles(${entry} "${prefix}/${tempResult}" ${files_container_name} "${extensions}" ${recurse} ${exclude_sources_regex})
         endif()
 
         get_filename_component(tempResult ${entry} LAST_EXT)
@@ -154,14 +172,14 @@ function(InnerAddAllFiles dir_path prefix files_container_name extensions recurs
     set(${files_container_name} ${${files_container_name}} PARENT_SCOPE)
 endfunction()
 
-# 添加指定路径下的 符合指定模式的文件 至 给定容器中
+# Add files from the specified path that match the given extensions and not match the given regex to the specified container
 #
-# [ARGV0] `dir_path`: 将要添加的文件的路径
-# [ARGV1] `prefix`: vs过滤器前缀
-# [ARGV2] `files_container_name`: 指定添加的容器的名称
-# [ARGV3] `extensions`: 源文件的扩展名
-# [ARGV4][OPT] `recurse`: 是否递归
-# [ARGV5][OPT] `exclude_sources_regex`: 排除的源文件
+# [ARGV0] `dir_path`: the path to add files from
+# [ARGV1] `prefix`: visual studio filter prefix
+# [ARGV2] `files_container_name`: the name of the container to add files to, a list variable name
+# [ARGV3] `extensions`: source file extensions (separated by `;`)
+# [ARGV4][OPT] `recurse`: whether to recurse
+# [ARGV5][OPT] `exclude_sources_regex`: regex to exclude source files
 function(AddFiles dir_path prefix files_container_name extensions)
     if("${ARGV3}" STREQUAL "")
         message(FATAL_ERROR "extensions must not be empty")
@@ -183,58 +201,64 @@ function(AddFiles dir_path prefix files_container_name extensions)
             message(FATAL_ERROR "couldn't add a directory's files which path is not in ${CMAKE_CURRENT_SOURCE_DIR}")
         endif()
 
-        InnerAddAllFiles(${dir_path} ${prefix} ${files_container_name} "${extensions}" ${recurse} "${exclude_sources_regex}")
+        __AddAllFiles(${dir_path} ${prefix} ${files_container_name} "${extensions}" ${recurse} "${exclude_sources_regex}")
         set(${files_container_name} ${${files_container_name}} PARENT_SCOPE)
     endif()
 endfunction()
 
-# Add precompile header to target
-# [ARGV0] target_name target name
-# [ARGV1] source_dir source directory to search pch files
-# [ARGV2][OPT] find_cmake_current_dir whether to search current cmake source dir for pch files, default to TRUE
-# [ARGV3][OPT] pch_name specific pch file name, if not provided, default to "pch.h;StdAfx.h;stdafx.h"
+# Add precompile header to target, the search order is:
+#  + ${source_dir}
+#  + ${source_dir}/include
+#  + CMAKE_CURRENT_SOURCE_DIR (if `find_cmake_current_dir` is TRUE)
+#  + CMAKE_CURRENT_SOURCE_DIR/include (if `find_cmake_current_dir` is TRUE)
+#  + CMAKE_CURRENT_SOURCE_DIR/include/${target_name} (if `find_cmake_current_dir` is TRUE)
+#
+# [ARGV0] `target_name`: target name
+# [ARGV1] `source_dir`: source directory to search pch files
+# [ARGV2][OPT] `find_cmake_current_dir`: whether to search current cmake source dir for pch files, default to TRUE
+# [ARGV3][OPT] `pch_name`: specific pch file name, if not provided, default to "pch.h;StdAfx.h;stdafx.h"
 macro(AddTargetPrecompileHeader target_name source_dir)
     RegularOptionalParameter("${ARGV2}" find_cmake_current_dir TRUE)
-    RegularOptionalParameter("${ARGV3}" pch_names "pch.h;StdAfx.h;stdafx.h")
+    RegularOptionalParameter("${ARGV3}" pch_name "pch.h;StdAfx.h;stdafx.h")
 
-    set(search_base_dir "${source_dir};${source_dir}/include")
+    set(searchBaseDir "${source_dir};${source_dir}/include")
     if(${find_cmake_current_dir} STREQUAL "TRUE")
-        list(APPEND search_base_dir "${CMAKE_CURRENT_SOURCE_DIR};${CMAKE_CURRENT_SOURCE_DIR}/include;${CMAKE_CURRENT_SOURCE_DIR}/include/${target_name}")
+        list(APPEND searchBaseDir "${CMAKE_CURRENT_SOURCE_DIR};${CMAKE_CURRENT_SOURCE_DIR}/include;${CMAKE_CURRENT_SOURCE_DIR}/include/${target_name}")
     endif()
 
-    foreach(candidate_base_dir ${search_base_dir})
-        set(is_found FALSE)
-        foreach(candidate_pch_name ${pch_names})
-            if(EXISTS ${candidate_base_dir}/${candidate_pch_name})
-                target_precompile_headers(${target_name} PRIVATE ${candidate_base_dir}/${candidate_pch_name})
-                set(is_found TRUE)
+    foreach(candidateBaseDir ${searchBaseDir})
+        set(isFound FALSE)
+        foreach(candidatePchName ${pch_name})
+            if(EXISTS ${candidateBaseDir}/${candidatePchName})
+                target_precompile_headers(${target_name} PRIVATE ${candidateBaseDir}/${candidatePchName})
+                set(isFound TRUE)
                 break()
             endif()
         endforeach()
 
-        if(${is_found})
+        if(${isFound})
             break()
         endif()
     endforeach()
 
-    unset(search_base_dir)
-    unset(is_found)
+    unset(searchBaseDir)
+    unset(isFound)
 
     unset(find_cmake_current_dir)
-    unset(pch_names)
+    unset(pch_name)
 endmacro()
 
-# 添加构建目标
+# Add a build target
 #
-# [ARGV0] target_name 目标名称
-# [ARGV1] target_type 目标类型，可执行文件 `EXECUTABLE`, 动态库 `SHARED`, 静态库 `STATIC`
-# [ARGV2][OPT] source_dir 源文件根目录
-# [ARGV3][OPT] extra_sources 额外的源文件
-# [ARGV4][OPT] exclude_sources_regex 需要排除的文件的模式
-# [ARGV5][OPT] no_pch 不自动添加预编译头
+# [ARGV0] `target_name`: the target name
+# [ARGV1] `target_type`: the target type, maybe an executable `EXECUTABLE`, shared library `SHARED`, static library `STATIC`
+# [ARGV2][OPT] `source_dir`: source directory root, `$` means the macro will not search `${CMAKE_CURRENT_SOURCE_DIR}` automatically, use `extra_sources` only
+# [ARGV3][OPT] `extra_sources`: additional source files
+# [ARGV4][OPT] `exclude_sources_regex`: pattern for files to exclude, acting on `source_dir`
+# [ARGV5][OPT] `no_pch`: do not automatically add precompiled headers
 macro(AddTarget target_name target_type)
     # ###########################################################################################
-    # 规整参数
+    # Regular parameters
     # ###########################################################################################
     if(TRUE)
         RegularOptionalParameter("${ARGV2}" source_dir "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -248,7 +272,7 @@ macro(AddTarget target_name target_type)
     endif()
 
     # ###########################################################################################
-    # 添加源文件、头文件、资源文件
+    # Add source files, header files, resource files
     # ###########################################################################################
     set(targetSources ${extra_sources})
     if(NOT "${source_dir}" STREQUAL "")
@@ -265,7 +289,7 @@ macro(AddTarget target_name target_type)
     endif()
 
     # ###########################################################################################
-    # 添加构建目标
+    # Add build target
     # ###########################################################################################
     if("${target_type}" STREQUAL "EXECUTABLE")
         add_executable(${target_name} ${targetSources})
@@ -280,14 +304,14 @@ macro(AddTarget target_name target_type)
     unset(targetSources)
 
     # ###########################################################################################
-    # 设置预编译头，注意，此项会导致该CMake构建时能通过，但使用TdxCMake构建时不通过，固须在某些文件添加StdAfx.h的引用
+    # Add precompile header
     # ###########################################################################################
     if("${no_pch}" STREQUAL "FALSE")
         AddTargetPrecompileHeader(${target_name} "${source_dir}")
     endif()
 
     # ###########################################################################################
-    # 设置包含目录
+    # Set include directories
     # ###########################################################################################
     if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/include)
         set(includeDir ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -302,7 +326,7 @@ macro(AddTarget target_name target_type)
     unset(includeDir)
 
     # ###########################################################################################
-    # 链接选项
+    # Set Compile options
     # ###########################################################################################
     if(${TARGET_DEV_SYSTEM} STREQUAL "Linux")
         if(${BUILD_CONFIGUARATION} STREQUAL "Debug" AND NOT ${CMAKE_HOST_SYSTEM} STREQUAL "Linux")
@@ -311,7 +335,7 @@ macro(AddTarget target_name target_type)
     endif()
 
     # ###########################################################################################
-    # 链接选项
+    # Set Link options
     # ###########################################################################################
     if(MSVC)
         target_link_options(${target_name} PRIVATE /VERBOSE:Lib)
@@ -322,17 +346,17 @@ macro(AddTarget target_name target_type)
     endif()
 
     # ###########################################################################################
-    # 其它设置
+    # Other options
     # ###########################################################################################
     if(TRUE)
-        # 目标架构
+        # target architecture
         if(${TARGET_ARCH} STREQUAL x86)
             target_compile_options(${target_name} PUBLIC "-m32")
         elseif(NOT ${TARGET_DEV_SYSTEM} STREQUAL "Neokylin")
             target_compile_options(${target_name} PUBLIC "-m64")
         endif()
 
-        # 输出目录
+        # output directory
         set_target_properties(${target_name} PROPERTIES
             RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/${OUTPUT_DIR}
             LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/${OUTPUT_DIR}
@@ -340,7 +364,7 @@ macro(AddTarget target_name target_type)
         )
     endif()
 
-    # 添加到配置目标中
+    # Add the target to global TARGETS list
     if(NOT ${target_name} IN_LIST TARGETS)
         list(APPEND TARGETS ${target_name})
     endif()
@@ -355,21 +379,21 @@ macro(AddTarget target_name target_type)
     unset(no_pch)
 endmacro()
 
-# 输出配置目标信息
+# Output configured targets information
 #
-# 包含：
-# 1.目标的类型
-# 2.目标的名称
-# 3.目标的头文件
-# 4.目标的源文件
-# 5.目标的包含目录
-# 6.目标的链接目录
-# 7.目标的预处理器定义
-# 8.目标的编译选项
-# 9.目标的链接选项
-# 10.目标的链接选项
-# 11.目标的链接文件
-# 12.目标的安装信息
+# The output information includes:
+# 1. Target type
+# 2. Target name
+# 3. Target headers
+# 4. Target sources
+# 5. Target include directories
+# 6. Target link directories
+# 7. Target preprocessor definitions
+# 8. Target compile options
+# 9. Target link options
+# 10. Target link options
+# 11. Target link files
+# 12. Target installation information
 macro(OutputTargetsInfos)
     if(${CMAKE_CURRENT_SOURCE_DIR} STREQUAL ${CMAKE_SOURCE_DIR})
         foreach(target ${TARGETS})
@@ -385,7 +409,7 @@ macro(OutputTargetsInfos)
 
             message(STATUS "|   with name: ${target}")
 
-            # 打印头文件
+            # Print headers
             message(STATUS "|   with headers:")
             get_target_property(tempResult ${target} SOURCES)
             list(FILTER tempResult INCLUDE REGEX ".*\.h$")
@@ -396,7 +420,7 @@ macro(OutputTargetsInfos)
                 endforeach()
             endif()
 
-            # 打印源文件
+            # Print sources
             message(STATUS "|   with sources:")
             get_target_property(tempResult ${target} SOURCES)
             list(FILTER tempResult EXCLUDE REGEX ".*\.h$")
@@ -407,7 +431,7 @@ macro(OutputTargetsInfos)
                 endforeach()
             endif()
 
-            # 打印包含目录
+            # Print include directories
             get_target_property(tempResult ${target} INCLUDE_DIRECTORIES)
             message(STATUS "|   with include dirs:")
 
@@ -417,7 +441,7 @@ macro(OutputTargetsInfos)
                 endforeach()
             endif()
 
-            # 打印链接目录
+            # Print link directories
             get_target_property(tempResult ${target} LINK_DIRECTORIES)
             message(STATUS "|   with link dirs:")
 
@@ -427,7 +451,7 @@ macro(OutputTargetsInfos)
                 endforeach()
             endif()
 
-            # 打印预处理器定义
+            # Print preprocessor definitions
             get_target_property(tempResult ${target} COMPILE_DEFINITIONS)
             message(STATUS "|   with definitions:")
 
@@ -437,7 +461,7 @@ macro(OutputTargetsInfos)
                 endforeach()
             endif()
 
-            # 打印编译选项
+            # Print compile options
             get_target_property(tempResult ${target} COMPILE_OPTIONS)
             message(STATUS "|   with compile options:")
 
@@ -447,7 +471,7 @@ macro(OutputTargetsInfos)
                 endforeach()
             endif()
 
-            # 打印链接选项
+            # Print link options
             get_target_property(tempResult ${target} LINK_OPTIONS)
             message(STATUS "|   with link options:")
 
@@ -457,7 +481,7 @@ macro(OutputTargetsInfos)
                 endforeach()
             endif()
 
-            # 打印链接文件
+            # Print link libraries
             get_target_property(tempResult ${target} LINK_LIBRARIES)
             message(STATUS "|   with links:")
 
@@ -468,8 +492,8 @@ macro(OutputTargetsInfos)
             endif()
         endforeach()
 
+        # Print install files
         message(STATUS "|   with install:")
-
         foreach(target ${TARGETS})
             get_target_property(installFiles ${target} "INSTALL_FILES")
 
