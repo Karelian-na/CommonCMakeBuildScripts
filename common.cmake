@@ -315,6 +315,8 @@ macro(AddTarget target_name target_type)
     # ###########################################################################################
     if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/include)
         set(includeDir ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    elseif("${source_dir}" STREQUAL "")
+        set(includeDir ${CMAKE_CURRENT_SOURCE_DIR})
     else()
         set(includeDir ${source_dir})
     endif()
