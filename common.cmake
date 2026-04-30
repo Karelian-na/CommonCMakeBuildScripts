@@ -358,12 +358,30 @@ macro(AddTarget target_name target_type)
             target_compile_options(${target_name} PUBLIC "-m64")
         endif()
 
-        # output directory
+        # target postfix
+        set(targetReleasePostfix "")
+        if(NOT ${target_type} STREQUAL "EXECUTABLE")
+            if(${TARGET_ARCH} STREQUAL x64)
+                set(targetReleasePostfix "-x64")
+            elseif(NOT ${TARGET_ARCH} STREQUAL x86)
+                set(targetReleasePostfix "")
+            endif()
+            set(targetDebugPostfix "d${targetReleasePostfix}")
+        endif()
+
+        # other target properties
         set_target_properties(${target_name} PROPERTIES
+            DEBUG_POSTFIX "${targetDebugPostfix}"
+            MINSIZEREL_POSTFIX "${targetReleasePostfix}"
+            RELEASE_POSTFIX "${targetReleasePostfix}"
+            RELWITHDEBINFO_POSTFIX "${targetReleasePostfix}"
             RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/${OUTPUT_DIR}
             LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/${OUTPUT_DIR}
             ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/${OUTPUT_DIR}
         )
+
+        unset(targetDebugPostfix)
+        unset(targetReleasePostfix)
     endif()
 
     # Add the target to global TARGETS list
