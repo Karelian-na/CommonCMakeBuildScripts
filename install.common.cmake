@@ -23,6 +23,7 @@ macro(InstallProject targets input_targets_config_file version version_compatibi
         "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake"
         VERSION ${version}
         COMPATIBILITY ${version_compatibility}
+        ARCH_INDEPENDENT
     )
     install(
         FILES "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake"
@@ -54,6 +55,6 @@ macro(InstallProject targets input_targets_config_file version version_compatibi
     install(EXPORT ${PROJECT_NAME}Targets
         FILE "${targets_export_filename}"
         NAMESPACE ${PROJECT_NAME}::
-        DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}"
+        DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}/${CMAKE_CXX_COMPILER_ARCHITECTURE_ID}"
     )
 endmacro()
