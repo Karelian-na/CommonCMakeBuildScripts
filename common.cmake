@@ -59,7 +59,7 @@ macro(PrepareProject)
         elseif("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL x86_64)
             set(TARGET_ARCH x64)
         elseif("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL aarch64)
-            set(TARGET_ARCH aarch64)
+            set(TARGET_ARCH arm64)
         endif()
 
         # ###########################################################################################
@@ -86,33 +86,49 @@ macro(PrepareProject)
         # Set system include directories (for clangd only)
         # ###########################################################################################
         if(MSVC)
+            add_compile_definitions(_MSC_VER=${MSVC_VERSION})
+
             string(REGEX REPLACE "^(.*)/(b|B)in.*$" "\\1" sysIncludeDir ${CMAKE_CXX_COMPILER})
             set(programFilesx86Path "$ENV{ProgramFiles} (x86)")
 
             if(MSVC_VERSION EQUAL 1200)
+                set(sdkPath "${programFilesx86Path}/Microsoft SDK")
                 include_directories(SYSTEM
-                    "${programFilesx86Path}/Microsoft SDK/include"
-                    ${sysIncludeDir}/mfc/include
-                    ${sysIncludeDir}/atl/include
+                    "${sdkPath}/include"
+                    "${sysIncludeDir}/mfc/include"
+                    "${sysIncludeDir}/atl/include"
+                )
+                link_directories(
+                    "${sysIncludeDir}/lib" # vcrt
+                    "${sysIncludeDir}/mfc/lib" # vcrt
                 )
             else()
-                include_directories(SYSTEM ${sysIncludeDir}/atlmfc/include)
+                include_directories(SYSTEM "${sysIncludeDir}/atlmfc/include")
 
                 if(MSVC_VERSION EQUAL 1600)
-                    include_directories(SYSTEM "${programFilesx86Path}/Microsoft SDKs/Windows/v7.0A/Include")
+                    set(sdkPath "${programFilesx86Path}/Microsoft SDKs/Windows/v7.0A")
+                    include_directories(SYSTEM "${sdkPath}/Include")
                 else()
                     string(REGEX MATCH "^(.+)/bin/([^/]*)/" tempResult ${CMAKE_MT})
+                    set(sdkPath "${CMAKE_MATCH_1}")
+                    set(sdkVersion "${CMAKE_MATCH_2}")
                     include_directories(SYSTEM
-                        ${CMAKE_MATCH_1}/include/${CMAKE_MATCH_2}/ucrt
-                        ${CMAKE_MATCH_1}/include/${CMAKE_MATCH_2}/um
-                        ${CMAKE_MATCH_1}/include/${CMAKE_MATCH_2}/shared
-                        ${CMAKE_MATCH_1}/include/${CMAKE_MATCH_2}/winrt
-                        ${CMAKE_MATCH_1}/include/${CMAKE_MATCH_2}/cppwinrt
+                        "${sdkPath}/include/${sdkVersion}/ucrt"
+                        "${sdkPath}/include/${sdkVersion}/um"
+                        "${sdkPath}/include/${sdkVersion}/shared"
+                        "${sdkPath}/include/${sdkVersion}/winrt"
+                        "${sdkPath}/include/${sdkVersion}/cppwinrt"
                     )
                 endif()
+
+                link_directories(
+                    "${sdkPath}/Lib/${sdkVersion}/um/${TARGET_ARCH}" # sdk
+                    "${sdkPath}/Lib/${sdkVersion}/ucrt/${TARGET_ARCH}" # sdk
+                    "${sysIncludeDir}/lib/${TARGET_ARCH}" # vcrt
+                )
             endif()
 
-            include_directories(SYSTEM ${sysIncludeDir}/include)
+            include_directories(SYSTEM "${sysIncludeDir}/include")
         else()
             foreach(file ${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES})
                 add_compile_options(-isystem${file})
@@ -353,9 +369,9 @@ macro(AddTarget target_name target_type)
     if(TRUE)
         # target architecture
         if(${TARGET_ARCH} STREQUAL x86)
-            target_compile_options(${target_name} PUBLIC "-m32")
+            target_compile_options(${target_name} PRIVATE "-m32")
         elseif(NOT ${TARGET_DEV_SYSTEM} STREQUAL "Neokylin")
-            target_compile_options(${target_name} PUBLIC "-m64")
+            target_compile_options(${target_name} PRIVATE "-m64")
         endif()
 
         # target postfix
