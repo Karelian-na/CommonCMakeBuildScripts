@@ -430,6 +430,10 @@ endmacro()
 # 10. Target link options
 # 11. Target link files
 # 12. Target installation information
+#
+# File lists are printed in full on the first configure.  On later configures,
+# only files added to or removed from a target since the previous configure are
+# printed.  The previous lists are stored in the build directory's CMake cache.
 macro(OutputTargetsInfos)
     if(${CMAKE_CURRENT_SOURCE_DIR} STREQUAL ${CMAKE_SOURCE_DIR})
         foreach(target ${TARGETS})
@@ -445,27 +449,60 @@ macro(OutputTargetsInfos)
 
             message(STATUS "|   with name: ${target}")
 
-            # Print headers
-            message(STATUS "|   with headers:")
+            # Print target files.  Persist the complete list so a subsequent
+            # configure can report only its delta.
             get_target_property(tempResult ${target} SOURCES)
-            list(FILTER tempResult INCLUDE REGEX ".*\.h$")
+            if("${tempResult}" STREQUAL "tempResult-NOTFOUND")
+                set(targetFiles "")
+            else()
+                set(targetFiles ${tempResult})
+            endif()
 
-            if(NOT "${tempResult}" STREQUAL "tempResult-NOTFOUND")
-                foreach(file ${tempResult})
+            string(MD5 targetFilesCacheKey "${CMAKE_SOURCE_DIR}:${target}")
+            set(targetFilesCacheVariable "OUTPUT_TARGETS_INFOS_FILES_${targetFilesCacheKey}")
+
+            if(DEFINED CACHE{${targetFilesCacheVariable}})
+                set(isFirstConfigure FALSE)
+                set(previousTargetFiles "${${targetFilesCacheVariable}}")
+                set(addedTargetFiles ${targetFiles})
+                set(removedTargetFiles ${previousTargetFiles})
+                if(NOT "${previousTargetFiles}" STREQUAL "")
+                    list(REMOVE_ITEM addedTargetFiles ${previousTargetFiles})
+                endif()
+                if(NOT "${targetFiles}" STREQUAL "")
+                    list(REMOVE_ITEM removedTargetFiles ${targetFiles})
+                endif()
+            else()
+                set(isFirstConfigure TRUE)
+                set(addedTargetFiles ${targetFiles})
+                set(removedTargetFiles "")
+            endif()
+
+            set(${targetFilesCacheVariable} "${targetFiles}" CACHE INTERNAL
+                "Previous file list for OutputTargetsInfos target ${target}")
+
+            if(${isFirstConfigure})
+                message(STATUS "|   with files:")
+                foreach(file ${targetFiles})
                     message(STATUS "|       ${file}")
+                endforeach()
+            elseif(NOT "${addedTargetFiles}" STREQUAL "" OR NOT "${removedTargetFiles}" STREQUAL "")
+                message(STATUS "|   with changed files:")
+                foreach(file ${addedTargetFiles})
+                    message(STATUS "|       added: ${file}")
+                endforeach()
+                foreach(file ${removedTargetFiles})
+                    message(STATUS "|       removed: ${file}")
                 endforeach()
             endif()
 
-            # Print sources
-            message(STATUS "|   with sources:")
-            get_target_property(tempResult ${target} SOURCES)
-            list(FILTER tempResult EXCLUDE REGEX ".*\.h$")
-
-            if(NOT "${tempResult}" STREQUAL "tempResult-NOTFOUND")
-                foreach(file ${tempResult})
-                    message(STATUS "|       ${file}")
-                endforeach()
-            endif()
+            unset(addedTargetFiles)
+            unset(isFirstConfigure)
+            unset(previousTargetFiles)
+            unset(removedTargetFiles)
+            unset(targetFiles)
+            unset(targetFilesCacheKey)
+            unset(targetFilesCacheVariable)
 
             # Print include directories
             get_target_property(tempResult ${target} INCLUDE_DIRECTORIES)
