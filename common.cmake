@@ -267,7 +267,7 @@ endmacro()
 # Add a build target
 #
 # [ARGV0] `target_name`: the target name
-# [ARGV1] `target_type`: the target type, maybe an executable `EXECUTABLE`, shared library `SHARED`, static library `STATIC`
+# [ARGV1] `target_type`: the target type: executable `EXECUTABLE`, shared library `SHARED`, module library `MODULE`, or static library `STATIC`
 # [ARGV2][OPT] `source_dir`: source directory root, `$` means the macro will not search `${CMAKE_CURRENT_SOURCE_DIR}` automatically, use `extra_sources` only
 # [ARGV3][OPT] `extra_sources`: additional source files
 # [ARGV4][OPT] `exclude_sources_regex`: pattern for files to exclude, acting on `source_dir`
@@ -309,8 +309,8 @@ macro(AddTarget target_name target_type)
     # ###########################################################################################
     if("${target_type}" STREQUAL "EXECUTABLE")
         add_executable(${target_name} ${targetSources})
-    elseif("${target_type}" STREQUAL "SHARED")
-        add_library(${target_name} SHARED ${targetSources})
+    elseif("${target_type}" STREQUAL "SHARED" OR "${target_type}" STREQUAL "MODULE")
+        add_library(${target_name} ${target_type} ${targetSources})
     else()
         add_library(${target_name} STATIC ${targetSources})
         string(REPLACE "-" "_" legalled_name ${target_name})
@@ -443,6 +443,8 @@ macro(OutputTargetsInfos)
                 message(STATUS "Added an exetuable:")
             elseif(${tempResult} STREQUAL "SHARED_LIBRARY")
                 message(STATUS "Added a dynamic library:")
+            elseif(${tempResult} STREQUAL "MODULE_LIBRARY")
+                message(STATUS "Added a module library:")
             else()
                 message(STATUS "Added a static library:")
             endif()
