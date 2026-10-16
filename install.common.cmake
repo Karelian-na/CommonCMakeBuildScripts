@@ -44,6 +44,33 @@ macro(InstallProject targets input_targets_config_file version version_compatibi
         LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
         ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
     )
+    set(ARCH_DETECT [=[
+if(${CMAKE_CURRENT_SOURCE_DIR} STREQUAL ${CMAKE_SOURCE_DIR} AND "${CMAKE_CXX_PLATFORM_ID}" STREQUAL "")
+    message(WARNING
+        "Cannot reliably detect the package target architecture because CMAKE_CXX_PLATFORM_ID is empty. "
+        "Enable CXX with project(... LANGUAGES CXX) or enable_language(CXX) before calling "
+        "InstallProject() in the package project or find_package() in a consumer project. "
+        "Without CXX initialization, architecture-specific target files may be selected incorrectly."
+    )
+endif()
+
+# A multilib compiler can target x86 on an x86_64 host; use its ABI.
+string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" tempResult)
+if(tempResult MATCHES "^(x86_64|amd64|i[3-6]86|x86)$")
+    if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+        set(DETECTED_ARCH x86)
+    elseif(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        set(DETECTED_ARCH x64)
+    else()
+        message(FATAL_ERROR "Unsupported x86 pointer size: ${CMAKE_SIZEOF_VOID_P}")
+    endif()
+elseif(tempResult MATCHES "^(aarch64|arm64)$")
+    set(DETECTED_ARCH arm64)
+else()
+    message(FATAL_ERROR "Unsupported target processor: ${CMAKE_SYSTEM_PROCESSOR}")
+endif()
+    ]=])
+    cmake_language(EVAL CODE "${ARCH_DETECT}")
     configure_package_config_file(
         "${input_targets_config_file}" "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake"
         INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}"
@@ -55,6 +82,6 @@ macro(InstallProject targets input_targets_config_file version version_compatibi
     install(EXPORT ${PROJECT_NAME}Targets
         FILE "${targets_export_filename}"
         NAMESPACE ${PROJECT_NAME}::
-        DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}/${CMAKE_CXX_COMPILER_ARCHITECTURE_ID}"
+        DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}/${DETECTED_ARCH}"
     )
 endmacro()

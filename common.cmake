@@ -11,9 +11,8 @@ include(${CMAKE_CURRENT_LIST_DIR}/utils.cmake)
 # Example CMakeList.txt:
 # ```cmake
 #   cmake_minimum_required(VERSION 3.15)
-#   include(path/to/common.cmake)
-#
 #   project(YourProjectName LANGUAGES CXX)
+#   include(path/to/common.cmake)
 #
 #   PrepareProject()
 #
@@ -38,6 +37,8 @@ include(${CMAKE_CURRENT_LIST_DIR}/utils.cmake)
 # `BUILD_CONFIGUARATION`: build configuration, values are `Debug` or `Release`
 # `OUTPUT_DIR`: output directory
 # `TARGETS`: stores configured targets, used for output information
+# Optional input: `TARGET_ARCH` requests x86, x64 or arm64; an ABI mismatch
+# stops configuration before output directories or targets are prepared.
 macro(PrepareProject)
     if(${CMAKE_CURRENT_SOURCE_DIR} STREQUAL ${CMAKE_SOURCE_DIR})
         set(supportedPlatforms "Windows;Linux")
@@ -52,15 +53,47 @@ macro(PrepareProject)
         # ###########################################################################################
         string(TOLOWER "${CMAKE_C_COMPILER_ARCHITECTURE_ID}" tempResult)
 
-        if("${tempResult}" STREQUAL x86)
-            set(TARGET_ARCH x86)
+        if(TARGET_DEV_SYSTEM STREQUAL "Linux")
+            # A multilib compiler can target x86 on an x86_64 host; use its ABI.
+            string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" tempResult)
+            if(tempResult MATCHES "^(x86_64|amd64|i[3-6]86|x86)$")
+                if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+                    set(detectedTargetArch x86)
+                elseif(CMAKE_SIZEOF_VOID_P EQUAL 8)
+                    set(detectedTargetArch x64)
+                else()
+                    message(FATAL_ERROR "Unsupported x86 pointer size: ${CMAKE_SIZEOF_VOID_P}")
+                endif()
+            elseif(tempResult MATCHES "^(aarch64|arm64)$")
+                set(detectedTargetArch arm64)
+            else()
+                message(FATAL_ERROR "Unsupported target processor: ${CMAKE_SYSTEM_PROCESSOR}")
+            endif()
+        elseif("${tempResult}" STREQUAL x86)
+            set(detectedTargetArch x86)
         elseif("${tempResult}" STREQUAL x64)
-            set(TARGET_ARCH x64)
+            set(detectedTargetArch x64)
         elseif("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL x86_64)
-            set(TARGET_ARCH x64)
+            set(detectedTargetArch x64)
         elseif("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL aarch64)
-            set(TARGET_ARCH arm64)
+            set(detectedTargetArch arm64)
         endif()
+
+        # A requested architecture is a requirement, never a naming override.
+        if(DEFINED TARGET_ARCH AND NOT "${TARGET_ARCH}" STREQUAL "")
+            if(NOT TARGET_ARCH MATCHES "^(x86|x64|arm64)$")
+                message(FATAL_ERROR "Unsupported requested target architecture: ${TARGET_ARCH}")
+            endif()
+            if(NOT "${detectedTargetArch}" STREQUAL "${TARGET_ARCH}")
+                message(FATAL_ERROR
+                    "Requested target architecture '${TARGET_ARCH}' does not match the compiler ABI '${detectedTargetArch}' "
+                    "(${CMAKE_SIZEOF_VOID_P}-byte pointers). No output directory will be configured. "
+                    "Select a matching toolchain and use CMake Tools Delete Cache and Reconfigure."
+                )
+            endif()
+        endif()
+        set(TARGET_ARCH "${detectedTargetArch}")
+        unset(detectedTargetArch)
 
         # ###########################################################################################
         # Set build configuration name
@@ -367,11 +400,14 @@ macro(AddTarget target_name target_type)
     # Other options
     # ###########################################################################################
     if(TRUE)
-        # target architecture
-        if(${TARGET_ARCH} STREQUAL x86)
-            target_compile_options(${target_name} PRIVATE "-m32")
-        elseif(NOT ${TARGET_DEV_SYSTEM} STREQUAL "Neokylin")
-            target_compile_options(${target_name} PRIVATE "-m64")
+        # Linux ABI selection belongs to the toolchain, including linker/probe flags.
+        # Retain the existing Windows target-option behavior.
+        if(NOT TARGET_DEV_SYSTEM STREQUAL "Linux")
+            if(${TARGET_ARCH} STREQUAL x86)
+                target_compile_options(${target_name} PRIVATE "-m32")
+            elseif(NOT ${TARGET_DEV_SYSTEM} STREQUAL "Neokylin")
+                target_compile_options(${target_name} PRIVATE "-m64")
+            endif()
         endif()
 
         # target postfix

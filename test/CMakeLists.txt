@@ -4,13 +4,15 @@ include(../common.cmake)
 
 project(test)
 
-# 构建前准备
+# Prepare compiler metadata shared by the integration projects.
 PrepareProject()
+enable_testing()
 
-# 添加构建目标
+# Build the shared library and its consumer with the common target helpers.
 add_subdirectory(dynamic)
 add_subdirectory(executable)
 target_link_libraries(executable PRIVATE dynamic)
 
-# 输出目标信息，仅在CMake配置根时有效
+add_subdirectory(architecture)
+
 OutputTargetsInfos()
