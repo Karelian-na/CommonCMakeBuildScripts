@@ -1,4 +1,4 @@
-#include "dynamic.h"
+#include "dynamic/dynamic.h"
 
 Dynamic::Dynamic() {
 	std::cout << "Hello";
